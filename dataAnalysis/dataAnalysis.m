@@ -1,4 +1,23 @@
 classdef dataAnalysis < handle
+%% dataAnalysis
+% This object can be used to extract behavioural and electrophysiological data from decision-making tasks. 
+% 'Attempts' are made to make it as flexible as possible and as for now allows you to use three different EEG 
+% inputs: biosemi, brainvision and any systems with a .mat as output. 
+%
+% How to use the object to extract data from 'any' .mat structure is more closely described in the
+% mainAnalysis.m file.
+% 
+% Depending on:
+%   1) EEGLAB (including Biosig extention).
+%   2) CSD toolbox and lay-out (https://psychophysiology.cpmc.columbia.edu/software/csdtoolbox/).
+%   3) findNoisyChannels (see https://github.com/VisLab/EEG-Clean-Tools)
+%   4) Brewermap (to get colors for plot. Can be easily replaced with just choosing colours)
+%   5) panels  (https://nl.mathworks.com/matlabcentral/fileexchange/20003-panel)
+% costum-made code:
+%   1) dataAnalysis (object to access all the functions, OR get data
+%   structure set-up as see below) --> here the data is cut to get the
+%   conditions/epochs and will allow and get the EEG data needed for
+%   constraining the NI models. 
     
     properties
         % set up parameters
