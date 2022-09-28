@@ -12,7 +12,7 @@ Code is depending on:
  **Please use the appropriate references for the dependencies above when using the code in this repository!** 
   
 ## mainDataAnalysis
-** mainDataAnalysis.m ** gives an tutorial on how to use dataAnalysis.m as object. This includes the following steps:
+**mainDataAnalysis.m** gives an tutorial on how to use dataAnalysis.m as object. This includes the following steps:
 1) Raw data folder structures.
 2) Presetting condition parameters and where to find them in the participants trial files.
 3) Presetting preprocessing EEG parameters.
@@ -21,7 +21,7 @@ Code is depending on:
 6) EEG waveform plotting and statistics. 
 
 ## mainDataModelling
-** mainDataModelling.m ** gives an tutorial on how to use dataModelling.m as object. For now, this requires you to use * dataAnalysis.m * to
+**mainDataModelling.m** gives an tutorial on how to use dataModelling.m as object. For now, this requires you to use * dataAnalysis.m * to
 extract behavioural data and when required neural data to constrain the models. 
 
 
