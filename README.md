@@ -21,7 +21,7 @@ Code is depending on:
 6) EEG waveform plotting and statistics. 
 
 ## mainDataModelling
-** mainDataModelling.m ** gives an tutorial on how to use dataModelling.m as object. This requires you to use * dataAnalysis.m * to
+** mainDataModelling.m ** gives an tutorial on how to use dataModelling.m as object. For now, this requires you to use * dataAnalysis.m * to
 extract behavioural data and when required neural data to constrain the models. 
 
 
