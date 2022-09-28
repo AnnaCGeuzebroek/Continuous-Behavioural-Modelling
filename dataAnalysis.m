@@ -13,11 +13,7 @@ classdef dataAnalysis < handle
     %   3) findNoisyChannels (see https://github.com/VisLab/EEG-Clean-Tools)
     %   4) Brewermap (to get colors for plot. Can be easily replaced with just choosing colours)
     %   5) panels  (https://nl.mathworks.com/matlabcentral/fileexchange/20003-panel)
-    % costum-made code:
-    %   1) dataAnalysis (object to access all the functions, OR get data
-    %   structure set-up as see below) --> here the data is cut to get the
-    %   conditions/epochs and will allow and get the EEG data needed for
-    %   constraining the NI models. 
+ 
     properties
         % set up parameters
         dataFolders
