@@ -1,0 +1,338 @@
+%% Behaviour, EEG data and Eye movement data analysis.
+% File is giving an example on how to use dataAnalysis object. It examples 
+% in details how the EEG data/Eyelink data and trial files (.mat) can be read
+% in. Attempts have been made to make this code as flexible as possible, in 
+% order to allow:
+%   - several EEG systems (biosemi, brainvision and systems with .mat as output)
+%   - several conditions combinations to be analysed, plotted and there are
+%       easy ways to add conditions. This is controlled by creating a 
+%       trialMatrix per participant linking each EEG/EOG/Eyelink epoch and 
+%       behaviour with an combintation of conditions. 
+%       By making all for-loops for plotting/analyzing ect depending on this
+%       trialmatrix, it is easy to flexibility change what you are looking at 
+%       as well as adding conditions (obj.getConditions). 
+%   - discrete and continuous task (e.g. possibility to add a inter-target-interval).
+%   - waveform plots (plotERP) is flexibily written to use different electrode
+%       combinations, different methods to choice electrodes and have grand average
+%       vs. frequency analysis. 
+%   - waveforms can be additionally plotted in several different ways, with different 
+%       baseline (obj.eeg.baseline), individual vs. group, all responses vs. only hits, etc.
+%
+% Code requires the data to be structured as follows:
+%   InputFolder     = BASEFOLDER\Data\Raw\
+%       Participant folder = BASEFOLDER\Data\Raw\PPNAME\ (note never use initials!)
+%           EEG folder           = BASEFOLDER\Data\Raw\PPNAME\EEG data\
+%           Eyelink folder       = BASEFOLDER\Data\Raw\PPNAME\Eyelink data\
+%           Trial files folder   = BASEFOLDER\Data\Raw\PPNAME\Trial files\
+%
+%
+% Depending on:
+%   1) EEGLAB (including Biosig extention).
+%   2) CSD toolbox and lay-out.
+%   3) findNoisyChannels
+%   4) Brewermap (Which I use to pick colors, but can be easily replaced with just choosing colours)
+%   5) panels (to create nice looking plots)
+%   6) For Biosemi: chanlocsBioSemi128 and coordsCSDBioSemi128 for BIOSEMI EEG NAMES (see Dependables)
+
+
+clear
+clc
+clear global
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ----------------     Input parameters    -------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% set all paths.
+if strcmp(computer, 'PCWIN64')
+    error('Please set your data folder')
+    inputFolder = 'YOURFOLDER\Data';    % add base folder of data. 
+    addpath(genpath('C:\Users\eng\Documents\MATLAB\dataAnalysis'))
+    
+    error('Please add the path to EEGLAB!')
+
+    if ~exist('eeglab', 'file')
+        run('YOURPATHTOEEGLAB\EEGLAB\eeglab'); close all;
+    end
+end
+
+% In some tasks experiments are block randomized. Furthermore, 
+% it can be interesting to look at time-on-task (within-block effects) 
+% or time-on-experiment (fatique??) effects.
+
+blockRandomized = 1;    % 0 vs. 1 this is important to for the conditions/trial matrix creation.
+TimeOnTask = 0;         % 0 = not interested, 1 = plot
+TimeOnExperiment = 0;   % 0 = not interested, 1 = plot
+
+% furthermore, for waveform plotting it can be interesting to look at standard fast vs. slow responses.
+numRTBins  = 2;        % creates N equal-sized bins. check if needed??
+
+% Set conditions, for example in dot motion task left vs. right-moving
+% or high vs. low coherence as within-participant conditions. Or in older
+% vs. younger as between context. 
+% IMPORTANT condNames should refer to the way that it was saved in the
+% experiment. This can be checked by loading the trial information file and
+% see how it will be set in the workspace. Same is happening with
+% conditions, e.g. for the left vs. right tilded contrast change, it is
+% saved as trialLR as condNames and 1 for left and 2 for right in the so-called
+% trialMatrix (matrix that will track the experimental conditions).
+% For example:
+conditions{1}  = [1 2];       % 1 - left/2 -right as how it is coded in your trial files. 
+condNames{1}   = 'direction'; % --> where it is save in your trial files, can be simply condition or par.direction or however you programmed it. 
+conditions{2}  = [25 70];       
+condNames{2}   = 'coherence';
+
+
+% preset the signal processing object. This will just preset all parameters (empty)
+% and allows you to access all functions
+parameters  = dataAnalysis.getInstance(); 
+
+% add standard parameters within this object.
+parameters.analysisEEG      = 1; % Analyse EEG (not nescecarry as we can also only look at Behaviour)
+parameters.system = 'bioSemi';   % Object will choice the approtiated loading function of EEGLAB
+
+parameters.analysisEyelink  = 0;
+parameters.analysisEOG      = 1; % Use additionally EOG electrodes and Frontal electrodes
+                                 % to look for blinks and exclude trials with blinks (We do this to prevent
+                                 % any possible effects of the blink on the sensory perception)
+parameters.analysisEMG = 0;
+
+parameters.numTrials   = 24; % number of trials per block.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% -------------     GET EXPERIMENT INFORMATION    ------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% function looping through the data files of each participants. Identifying
+% the behavioural information. including numBlocks, numBlocks per
+% condition, numStimulus in each conditions and their specific condition (
+% here initialy all stimulus in each block are 1 condition.) However, it is
+% possible that the conditions information are in the EEG files. So here
+% simply put all the par and other parameters of each participant away.
+
+parameters.getInformation(0, inputFolder, conditions, condNames, blockRandomized);
+clear cond* *Folder
+
+% assuming that parameters are the same for all participants and with all
+% blocks
+parameters.DetectOrDisc = 0;
+
+parameters.stim.refreshRate  = 60;    % in Hz, Screens refreshRate
+parameters.stim.duration     = 1000;  % in ms, duration of the stimulus (or if variable the maximal duration) [TODO all in sec!]
+parameters.stim.freqSSVEP    = 15;    % in Hz, possibility to add if there is a steady-state visual-evoked potential (SSVEP) 
+parameters.stim.epoch        = [0 2500];  % largers epoch but this is depending on how you wanna extract the epochs (see stim.timing)
+parameters.stim.timing       = 'past';    % get ITI or timing before/after or just as given by stim.epoch around trigger. TODO set in stim instead of EEG. 
+
+parameters.stim.RTdeadLine = [-1.8 1.65]; % TODO check this - again.. Don't know the function anymore. 
+parameters.stim.RTCutOff   = 0.25;        % in sec., Only reaction times after certain 'motor delay', e.g. 250 ms. 
+parameters.stim.FA         = 1;           % 0=No, 1=Yes, Do you wanna false alarms (NOTE: in the sense of responses to noise).
+parameters.stim.FACutOff   = [];          % when working with continuous task, you might wanna focus on period before (or after depending on timing) stimulus.
+
+% As this is specificly an continous task, inform about ITI respectively.
+% This can also be used for lead-in periods. 
+parameters.stim.lengthITI  = [2 4 6 8];   % in sec. 
+parameters.stim.namesITI   = 'ITI';       % Name as how saved in trial files. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ---------------------   Pre-set figure parameters   --------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Following parameters are just quickly preset, but they might be changed depending
+% on which signal you wanna plot!!
+% set your color scheme set here, depending on your conditions. You can either use
+% brewermap or just set your own. 
+ColoursCond12 =  flipud(brewermap(4,'RdBu')); ColoursCond12  = [128 205 193; 1 133 113; 223 194 125; 166 97 26]/255;
+
+parameters.figLayOut.letterSize  = 9;
+parameters.figLayOut.letterType  = 'Arial';
+parameters.figLayOut.lineWidth   = 1.2;
+parameters.figLayOut.lineType    = {'-' '-' '-' '-'};
+parameters.figLayOut.legNames{1} = {'left', 'right'};
+parameters.figLayOut.legNames{2} = {'Weak', 'Strong'}; % shift as they are 'order' by strength
+parameters.figLayOut.legTitle{1} = 'Direction';
+parameters.figLayOut.legTitle{2} = 'Evidence strength';
+
+parameters.figLayOut.plotCI      = 0.05; % Do you wanna plot a shaded errorbar around the waveforms and with what 'transparancy'.
+parameters.figLayOut.removeInter = 1;
+parameters.figLayOut.saveDim     = [5 11]; % in cm. 
+parameters.figLayOut.colours     = ColoursCond12;
+
+% Obviously, you can just set it to what you define in the obj.eeg.targetEpoch/obj.eeg.responseEpoch.
+% but in certain cases it might be helpful to zoom in at certain points. 
+parameters.figLayOut.targetLim   = [-200 0:500:1000];
+parameters.figLayOut.responseLim = [-400 0 200];
+
+parameters.figLayOut.plotRT      = []; % wanna plot median RT  (according to RT bins)?
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% --------------    EEG PROCESSING PARAMETERS    -------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% All parameters needed to set-up the pre-processing. We use a most
+% simplest pre-processing protocol with the following steps:
+%   1) detrending for all (1) or only for the channels that it would
+%   benefit (2).
+%   2) Low-pass filtered using a filter designed by Simon Kelly. (see obj.setFilters)
+%   3) High-pass filtered using filtfilt.
+%   4) Additionally, the findNoisyChannels within AutoMagic.
+%   5) Bad channel interpolation
+%   6) CSD apply. 
+
+%---------------     set pre-processing parameters   ----------------------
+parameters.eeg.NumberOfChannels = 128;
+
+% load in a structure 'chanlocs' containing the x,y,z locations of each of the 128 scalp channels in the cap.
+load chanlocsBioSemi128;
+elab = strings(parameters.eeg.NumberOfChannels,1);
+for indChan = 1:parameters.eeg.NumberOfChannels
+    elab(indChan) = chanlocs(indChan).labels;
+end
+elab(end+1)='FCz'; clear ind*
+
+parameters.eeg.ChannelsName   	= elab; % Add channel names
+parameters.eeg.SampleRate   	= 512;	% EEG sample rate
+
+parameters.eeg.chanlocs         = chanlocs;	% electrode locations
+parameters.eeg.transChanlocs	= load('coordsCSDBioSemi128.mat');	% electrode locations to apply CSD
+
+
+parameters.eeg.applyFindDCcorrect   = 0;    % does your system have DC offset corrections? and should we account for them?
+parameters.eeg.ampSaturation	    = 3276;	% What's the maximum limiting amplitude of the amplifiers, to detect saturation?
+parameters.eeg.postDCC  = 700;              % how many samples after DCC is EEG rubbish?
+
+parameters.eeg.badChannel   = 1;	% set on one if you want to apply bad channel selection and interpolation before epoching.
+
+parameters.eeg.applyLPF 	= 1;    % attention here that the lowpass filter is different in New York as in Ireland.
+parameters.eeg.cuttoffLPF	= 38;	% 38 cut-off threshold for low-pass filter
+                                    % low-pass filter will be different as NY has 60 hz electricity rate.
+parameters.eeg.LHamming     = 77;   % 77
+
+parameters.eeg.applyHPF     = 0;    % look at raw data if is nescessary.
+parameters.eeg.simonHPF     = 0;
+parameters.eeg.HPFcutoff    = 0;
+parameters.eeg.applyDetrend	= 1;    % option 1(all)/ 2(only that will benefit from it)
+
+parameters.eeg.artifactThres = 80;  % note that artifacts are reject right after epoching and before applying CSD. 
+parameters.eeg.artifactEOG   = 200;
+parameters.eeg.intArtifact   = 1;
+
+parameters.eeg.channelVEOG   = 1:2;
+parameters.eeg.channelHEOG   = 3:4;
+
+parameters.eeg.applyCSD = 1;
+parameters.eeg.timing = 'past';     % TODO change this to stimulus.
+
+%--------------- set triggers and EPOCHS definition -----------------------
+% The trigger codes we used for the different events were as follows:
+parameters.triggers.start       = 1;            % Start of the trial    % TODO check for start of experiment!!
+parameters.triggers.stimulusOFF = 5;            % Target off
+parameters.triggers.stimulusON  = [170 125];    % 170 for 70% and 125 for 25%
+parameters.triggers.response    = [12 13];      % left vs. right
+
+% EPOCH DEFINITION
+parameters.eeg.epochLock = parameters.triggers.stimulusON;
+parameters.eeg.baseline  = 0 + [-1 1]*1000/parameters.stim.freqSSVEP;  
+
+% Initially we set a rather larger epoch based on the stimulus definitition
+% 'parameters.stim.epoch'. This is used to cut out a larger epoch to apply
+% all the ERP pre-processing on. Afterwards smaller epochs are created to
+% get the target- and response-locked epochs. This is usefull especially
+% for the ERD (event related desynchronization) and the SSVEP later
+% onwards. These range are used for the initial plots to explore the full range.
+% We later zoomed in to the new ranges to get a better view. 
+% TODO check this.. it isnt easy to read now. 
+parameters.eeg.targetEpoch   = -ceil(500/(1000/parameters.eeg.SampleRate))*(1000/parameters.eeg.SampleRate):1000/parameters.eeg.SampleRate:ceil(parameters.stim.RTdeadLine(2)*1000/(1000/parameters.eeg.SampleRate))*(1000/parameters.eeg.SampleRate);
+parameters.eeg.responseEpoch = -ceil(800/(1000/parameters.eeg.SampleRate))*(1000/parameters.eeg.SampleRate):1000/parameters.eeg.SampleRate:ceil(400/(1000/parameters.eeg.SampleRate))*(1000/parameters.eeg.SampleRate);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ----------------    Perform eeg prep  -------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+parameters.applyPreprocessing; % todo check behaviour resp vs. respLR and make flexible. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ---------------------   Epoching data    -------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+parameters.epochingData;
+parameters.applyCSD;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ---------------------   Behavioural data    ----------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% we create equal sized Reaction Time (RT) bins per participant per conditions
+% to check the alignment of the signals with the actual median RT as certrain 
+% signals (such as centrapartial positivity, CPP, see O'Connell et al., 2012).
+
+parameters.binRTs(1, [1/3 2/3], [1 2]); %TODO check inputs. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ------------------     Waveform plotting       -------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Here the CPP is plotted as an example as well as osccilations in the Beta
+% band in order to demostrated the inputs in obj.plotERP.
+
+close all
+
+%% ------------------- get CPP -----------------------------------------
+% define topoplot information
+trangeTopo  =  0 + [-2 -1]*1000/parameters.stim.freqSSVEP;  % note if you add a second row, these will be used for FA plots.
+                                                            % Only nesc. when you are using target-locked topos
+TargetOrResponse = 2;       % as written 1) target-locked 2) response-locked
+AverageOrSlope   = 1;       % as written 1) for grand average 2) slope %TODO remove for now.. but over the top for here. 
+
+% define rest
+methodUsed       = 2;       % Method used can be 1) choose spec. electrodes, 2) choose cluster of electrodes and get the 3 best based on SNR, 3) apply lucalize TODO get reference to what it is. 
+plotThis         = 2;       % 1) individual plots, 
+                            % 2) average Hits and seperated average Misses and FA
+                            % 3) include all average target-locked Misses
+                            % 4) plot target and response seperately.
+                            % 5) get first derivative TODO check this out!!!
+                            
+baselineCorrect  = 1;       % baseline correction isn't allow nesceccary, and might sometimes obscure effects. 
+
+grouping         = 0;       % if you want to include seperated plots according to a specific condition (TODO check which one it takes...)
+plotCondition    = [1 2];   % check the obj.behaviour{1}.trialMatrix and obj.getConditions to get a better understanding on how this variable defines what you plot. 
+
+Elec             = 'A5 A19 A32 A18 A20 A31 A17 A21 A30';  % when left empty, code allows you to choose electrodes based on the topoplot. 
+
+% Plot target and response locked CPP (target-locked including all misses)
+% as a function of target context as well as target evidence strength.
+[CPPQuality, fig]  = parameters.plotERP(methodUsed, 'CPP', Elec , baselineCorrect,...
+   plotThis, plotCondition, grouping, trangeTopo, TargetOrResponse, AverageOrSlope);
+
+% Plot difference topo plots
+parameters.plotDifferenceTopo('CPP', Elec, [1 2], trangeTopo, TargetOrResponse, AverageOrSlope);
+
+
+% get waveform parameters.
+statRange(1,:)  = 0 + [-2 -1]*1000/parameters.stim.freqSSVEP;
+statRange(2,:)  = [-250 -1*1000/parameters.stim.freqSSVEP];    % additional for slope calculations.
+PeakMeanOrMax    = 1;   % 1=mean, 2=max amplitude in the range
+negOrPos         = 2;   % 1=neg, 2=pos, important for peakmax.
+rtBins           = [1/3 2/3]; % or [] when not including RT as cofound
+
+% plot with RT as confounding factor. 
+tblCPP = parameters.getWaveformParameters(methodUsed, 'CPP', rtBins , baselineCorrect,...
+    1, plotCondition, grouping, statRange, TargetOrResponse, negOrPos, PeakMeanOrMax); % check why tbl didn't work here. 
+
+% tblCPP can than be used to apply linear mixed models, for example:
+
+lmeCPP = fitglme(tblCPP,  'Peak ~  1 +  Direction*Evidencestrength*RT + (1|ppNames)',...
+    'FitMethod','Laplace');
+
+
+% ITI duration
+%{
+baselineCorrect = 0;
+parameters.figLayOut.colours = ColoursCond12([1 1 1 1 2 2 2 2 3 3 3 3],:);
+parameters.figLayOut.lineType = {'-', '--', '-.', ':', '-', '--', '-.', ':', '-', '--', '-.', ':'};
+
+% ITI plotting.
+plotCondition = [4 3]; grouping = 4;
+parameters.plotITI(methodUsed, 'CPP',  'A5 A19 A32 A18 A20 A31 A17 A21 A30' , 1,...
+    plotCondition, grouping);
+
+parameters.figLayOut.colours = repmat(ColoursCond12(1:3,:),4,1);
+parameters.figLayOut.lineType = repmat({'-'},12, 1)';
+
+
+% ITI plotting.
+plotCondition = [4]; grouping = 0;
+parameters.plotITI( methodUsed, 'CPP',  'A5 A19 A32 A18 A20 A31 A17 A21 A30' , 1,...
+    plotCondition, grouping);
+%}
