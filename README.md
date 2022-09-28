@@ -9,7 +9,7 @@ Code is depending on:
   5) [panels](https://nl.mathworks.com/matlabcentral/fileexchange/20003-panel)
   6) [fminsearchbnd](https://nl.mathworks.com/matlabcentral/fileexchange/8277-fminsearchbnd-fminsearchcon)
  
- **Please use the appropriate references to the code above when using the in this repository!** 
+ **Please use the appropriate references for the dependencies above when using the code in this repository!** 
   
 ## mainDataAnalysis
 ** mainDataAnalysis.m ** gives an tutorial on how to use dataAnalysis.m as object. This includes the following steps:
