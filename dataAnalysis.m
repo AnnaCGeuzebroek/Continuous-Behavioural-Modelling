@@ -68,7 +68,8 @@ classdef dataAnalysis < handle
             
             obj.conditions = conditions;
             obj.condNames  = condNames;
-            
+            keyboard
+            %TODO add check for dependencies!!
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             %% -------------- Folders and Participants  -------------------
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
