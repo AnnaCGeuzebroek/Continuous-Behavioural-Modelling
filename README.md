@@ -7,6 +7,9 @@ Code is depending on:
   3) [findNoisyChannels](https://github.com/VisLab/EEG-Clean-Tools)
   4) [Brewermap](https://github.com/DrosteEffect/BrewerMap) (to get colors for plot. Can be easily replaced with just choosing colours)
   5) [panels](https://nl.mathworks.com/matlabcentral/fileexchange/20003-panel)
+  6) [fminsearchbnd](https://nl.mathworks.com/matlabcentral/fileexchange/8277-fminsearchbnd-fminsearchcon)
+ 
+ **Please use the appropriate references to the code above when using the functions here.** 
   
 ## mainDataAnalysis
 ** mainDataAnalysis.m ** gives an tutorial on how to use dataAnalysis.m as object. This includes the following steps:
