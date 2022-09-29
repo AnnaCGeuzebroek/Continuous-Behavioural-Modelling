@@ -1,5 +1,5 @@
 %% Behaviour, EEG data and Eye movement data analysis.
-% File is giving an example on how to use dataAnalysis object. It examples 
+% File is giving an example on how to use dataAnalysis object. It shows 
 % in details how the EEG data/Eyelink data and trial files (.mat) can be read
 % in. Attempts have been made to make this code as flexible as possible, in 
 % order to allow:
@@ -8,14 +8,15 @@
 %       easy ways to add conditions. This is controlled by creating a 
 %       trialMatrix per participant linking each EEG/EOG/Eyelink epoch and 
 %       behaviour with an combintation of conditions. 
-%       By making all for-loops for plotting/analyzing ect depending on this
+%       By making all for-loops for plotting/analyzing ect. depending on this
 %       trialmatrix, it is easy to flexibility change what you are looking at 
 %       as well as adding conditions (obj.getConditions). 
-%   - discrete and continuous task (e.g. possibility to add a inter-target-interval).
-%   - waveform plots (plotERP) is flexibily written to use different electrode
+%   - Different tasks structures. Discrete and continuous task 
+%       (e.g. possibility to add a inter-target-interval), timing before or after.
+%   - Waveform plots (plotERP) is flexibily written to use different electrode
 %       combinations, different methods to choice electrodes and have grand average
 %       vs. frequency analysis. 
-%   - waveforms can be additionally plotted in several different ways, with different 
+%   - Waveforms can be additionally plotted in several different ways, with different 
 %       baseline (obj.eeg.baseline), individual vs. group, all responses vs. only hits, etc.
 %
 % Code requires the data to be structured as follows:
@@ -59,12 +60,12 @@ end
 % it can be interesting to look at time-on-task (within-block effects) 
 % or time-on-experiment (fatique??) effects.
 
-blockRandomized = 1;    % 0 vs. 1 this is important to for the conditions/trial matrix creation.
-TimeOnTask = 0;         % 0 = not interested, 1 = plot
-TimeOnExperiment = 0;   % 0 = not interested, 1 = plot
+blockRandomized  = 1;    % 0 vs. 1 this is important to for the conditions/trial matrix creation.
+TimeOnTask       = 0;    % 0 = not interested, 1 = plot
+TimeOnExperiment = 0;    % 0 = not interested, 1 = plot
 
 % furthermore, for waveform plotting it can be interesting to look at standard fast vs. slow responses.
-numRTBins  = 2;        % creates N equal-sized bins. check if needed??
+numRTBins  = 2;        % creates N equal-sized bins. TODO check if needed??
 
 % Set conditions, for example in dot motion task left vs. right-moving
 % or high vs. low coherence as within-participant conditions. Or in older
@@ -78,7 +79,7 @@ numRTBins  = 2;        % creates N equal-sized bins. check if needed??
 % For example:
 conditions{1}  = [1 2];       % 1 - left/2 -right as how it is coded in your trial files. 
 condNames{1}   = 'direction'; % --> where it is save in your trial files, can be simply condition or par.direction or however you programmed it. 
-conditions{2}  = [25 70];       
+conditions{2}  = [25 70];     % NOTE, very importantly, here the order isn't relevant as for getConditions they always get sorted by strength (for example 25 than 70)
 condNames{2}   = 'coherence';
 
 
@@ -87,13 +88,14 @@ condNames{2}   = 'coherence';
 parameters  = dataAnalysis.getInstance(); 
 
 % add standard parameters within this object.
-parameters.analysisEEG      = 1; % Analyse EEG (not nescecarry as we can also only look at Behaviour)
-parameters.system = 'bioSemi';   % Object will choice the approtiated loading function of EEGLAB
+parameters.analysisEEG      = 1;           % Analyse EEG (not nescecarry as we can also only look at Behaviour)
+parameters.system           = 'bioSemi';   % Object will choice the approtiated loading function of EEGLAB
 
 parameters.analysisEyelink  = 0;
 parameters.analysisEOG      = 1; % Use additionally EOG electrodes and Frontal electrodes
                                  % to look for blinks and exclude trials with blinks (We do this to prevent
-                                 % any possible effects of the blink on the sensory perception)
+                                 % any possible effects of the blink on the sensory perception). You do need to
+                                 % specify which electrodes the EOG data are. 
 parameters.analysisEMG = 0;
 
 parameters.numTrials   = 24; % number of trials per block.
@@ -111,13 +113,12 @@ parameters.numTrials   = 24; % number of trials per block.
 parameters.getInformation(0, inputFolder, conditions, condNames, blockRandomized);
 clear cond* *Folder
 
-% assuming that parameters are the same for all participants and with all
-% blocks
-parameters.DetectOrDisc = 0;
+% Assuming that parameters are the same for all participants
+parameters.DetectOrDisc = 0;          % controls the way that behaviour is extracted, e.g. correct vs. erros when put on 1
 
-parameters.stim.refreshRate  = 60;    % in Hz, Screens refreshRate
-parameters.stim.duration     = 1000;  % in ms, duration of the stimulus (or if variable the maximal duration) [TODO all in sec!]
-parameters.stim.freqSSVEP    = 15;    % in Hz, possibility to add if there is a steady-state visual-evoked potential (SSVEP) 
+parameters.stim.refreshRate  = 60;        % in Hz, Screens refreshRate
+parameters.stim.duration     = 1000;      % in ms, duration of the stimulus (or if variable the maximal duration) [TODO all in sec!]
+parameters.stim.freqSSVEP    = 15;        % in Hz, possibility to add if there is a steady-state visual-evoked potential (SSVEP) 
 parameters.stim.epoch        = [0 2500];  % largers epoch but this is depending on how you wanna extract the epochs (see stim.timing)
 parameters.stim.timing       = 'past';    % get ITI or timing before/after or just as given by stim.epoch around trigger. TODO set in stim instead of EEG. 
 
@@ -138,7 +139,8 @@ parameters.stim.namesITI   = 'ITI';       % Name as how saved in trial files.
 % on which signal you wanna plot!!
 % set your color scheme set here, depending on your conditions. You can either use
 % brewermap or just set your own. 
-ColoursCond12 =  flipud(brewermap(4,'RdBu')); ColoursCond12  = [128 205 193; 1 133 113; 223 194 125; 166 97 26]/255;
+ColoursCond12 =  flipud(brewermap(4,'RdBu')); % OR
+ColoursCond12  = [128 205 193; 1 133 113; 223 194 125; 166 97 26]/255;
 
 parameters.figLayOut.letterSize  = 9;
 parameters.figLayOut.letterType  = 'Arial';
@@ -315,7 +317,12 @@ tblCPP = parameters.getWaveformParameters(methodUsed, 'CPP', rtBins , baselineCo
 lmeCPP = fitglme(tblCPP,  'Peak ~  1 +  Direction*Evidencestrength*RT + (1|ppNames)',...
     'FitMethod','Laplace');
 
+% Example on how to add a condition, e.g. here the ITI length. This require you to 
+% have an for-loop in this main-file (so a bit messy).
 
+for indPP = 1:length(parameters.ppNames) % for all participants
+    keyboard
+end
 % ITI duration
 %{
 baselineCorrect = 0;
