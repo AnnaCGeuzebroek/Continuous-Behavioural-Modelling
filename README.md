@@ -4,7 +4,7 @@ General function needed to analysis behavioural and EEG of decision-making tasks
 Code is depending on:
   1) [EEGLAB](https://eeglab.org/others/How_to_download_EEGLAB.html) (including Biosig extention).
   2) [CSD toolbox](https://psychophysiology.cpmc.columbia.edu/software/csdtoolbox/) and lay-out.
-  3) [findNoisyChannels](https://github.com/VisLab/EEG-Clean-Tools)
+  3) [findNoisyChannels](https://github.com/VisLab/EEG-Clean-Tools)  (from PREP toolbox)
   4) [Brewermap](https://github.com/DrosteEffect/BrewerMap) (to get colors for plot. Can be easily replaced with just choosing colours)
   5) [panels](https://nl.mathworks.com/matlabcentral/fileexchange/20003-panel)
   6) [fminsearchbnd](https://nl.mathworks.com/matlabcentral/fileexchange/8277-fminsearchbnd-fminsearchcon)
