@@ -1935,7 +1935,9 @@ classdef dataAnalysis < handle
                                 ERP(indChan,timeSeries(1):timeSeries(end)+ diff(timeSeries(1:2))-1, indEpoch) = interp(downERD(indChan,:, indEpoch), diff(timeSeries(1:2)));
                             end
                         end
-                        ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
+                        if BaselineCorrect
+                            ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
+                        end
                     end
                     
                     % calculated ERP topography
