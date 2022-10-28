@@ -372,7 +372,6 @@ classdef dataModelling < handle
                     % analysed! Deals in seconds. FOR FUTHER, I want to
                     % make the simdat more readable, and add it in a
                     % structure more like behavior as in obj.behaviour!
-                    
                     for indTarget = 1:length(targT)
                         nextrespind = find(RespT > targT(indTarget) + minRT & RespT < targT(indTarget) + maxRT, 1); % find the index of the next response which is within the allowable @hit@ window
                         if ~isempty(nextrespind) 
@@ -389,7 +388,10 @@ classdef dataModelling < handle
                             end
                         end
                         
-                        if getsimDV == 1
+                        if getsimDV == 1 % simulated the decision variable for plotting (possible for modelling)
+                        % As we are exploring possible ways to use Neural data to inform our models and/or validate our
+                        % models we can also use the DV (e.g. accumulated decision variable) to simulated how targets/responses
+                        % would look like. This is done here. 
                             if (targT(indTarget)/dt) + ceil((obj.stim.targetEpoch(end))/dt) < length(DV)
                                 DecValue.Target(1:length(targetPlot),acc) = DV(round(targT(indTarget)/dt) + targetPlot);
                                 
