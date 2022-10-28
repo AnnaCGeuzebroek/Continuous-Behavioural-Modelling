@@ -558,7 +558,7 @@ classdef dataModelling < handle
                 % each quantile, including FAs, because this is the behavioural
                 % summary we wll try to fit. This is for Chi^2
                 % e.g. TODO which optimiziation function
-                q(indCond,:) = [0 quantile(currRT,qps)-0.5/60 obj.stim.RTdeadLine(end)];  % subtracted half of a refresh cycle just because response can only happen on each refresh, and setting the boundaries between quantile bins is then safer so > and >= don't give different results
+                q(indCond,:) = [0 quantile(currRT,qps)-0.5/60 max(currRT)];  % subtracted half of a refresh cycle just because response can only happen on each refresh, and setting the boundaries between quantile bins is then safer so > and >= don't give different results
                     
                 for indBin = 1:numBins
                     % number of trials in each of the 6 quantile bins
@@ -660,16 +660,17 @@ classdef dataModelling < handle
                 
                 bb = bar(indCond, pred.pij(indCond,furtherIndex));
                 set(bb,'FaceColor', obj.figLayOut.colours(indCond,:), 'FaceAlpha', 0.3)
-                errorbar(indCond, pred.pij(indCond,furtherIndex), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
                 
-                plot(indCond, cumsum(datsum.pij(indCond,furtherIndex)),'o',...
+                plot(indCond, datsum.pij(indCond,furtherIndex),'o',...
                     'MarkerEdgeColor', [1 1 1],...
                     'MarkerFaceColor', obj.figLayOut.colours(indCond,:),...
                     'LineWidth', obj.figLayOut.lineWidth)
+               errorbar(indCond, datsum.pij(indCond,furtherIndex), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
+
             end
             
             ylim([0 figInfo.YLim(end)])
-            ylabel('Proportion')
+            ylabel({'Proportion' 'misses'})
             title(sprintf('%s (%0.1f)', modelName, err))
             
             set(gca,'FontSize', obj.figLayOut.letterSize);
@@ -687,16 +688,17 @@ classdef dataModelling < handle
                 
                 bb = bar(indCond, pred.pij(indCond,furtherIndex+1));
                 set(bb,'FaceColor', obj.figLayOut.colours(indCond,:), 'FaceAlpha', 0.3)
-                errorbar(indCond, pred.pij(indCond,furtherIndex+1), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
                 
-                plot(indCond, cumsum(datsum.pij(indCond,furtherIndex+1)),'o',...
+                plot(indCond, datsum.pij(indCond,furtherIndex+1),'o',...
                     'MarkerEdgeColor', [1 1 1],...
                     'MarkerFaceColor', obj.figLayOut.colours(indCond,:),...
                     'LineWidth', obj.figLayOut.lineWidth)
+                    
+                errorbar(indCond, datsum.pij(indCond,furtherIndex+1), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
             end
             
             ylim([0 figInfo.YLim(end)])
-            ylabel('Proportion')
+            ylabel({'Proportion' 'False Alarms'})
             title(sprintf('%s (%0.1f)', modelName, err))
             
             set(gca,'FontSize', obj.figLayOut.letterSize);
