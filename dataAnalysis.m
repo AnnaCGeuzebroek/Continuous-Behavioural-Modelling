@@ -1081,10 +1081,8 @@ classdef dataAnalysis < handle
                 
                 currInput  = fullfile(obj.outputFolder, 'EEG data', obj.ppNames{indPP});
                 currOutput = fullfile(obj.outputFolder, 'EEG data', obj.ppNames{indPP}, [obj.ppNames{indPP} '_epochedEEG_HPF' num2str(obj.eeg.HPFcutoff) obj.stim.timing '.mat']);
-               
-                currOutputBehaviour = fullfile(obj.outputFolder, 'Behavioural data');
-
-                if ~exist(currOutputBehaviour, 'file') || redoEpoch
+                
+                if ~exist(currOutput, 'file') || redoEpoch
                     fprintf(['Epoching participant ' obj.ppNames{indPP} ])
                     
                     %% %%%%%%%%%%%%  Loop through block files   %%%%%%%
@@ -1360,7 +1358,7 @@ classdef dataAnalysis < handle
                         end
                     end
                     
-                    saveFiles = {};
+                    saveFiles = {'tmpBehaviour'};
                     if obj.analysisEEG
                         ERP = ERP(:,:,1:size(tmpBehaviour.indReaction,1));
                         
@@ -1400,13 +1398,12 @@ classdef dataAnalysis < handle
                     end
                     
                     save(currOutput, saveFiles{:}, '-v7.3');
-                    save(fullfile(currOutputBehaviour, [obj.ppNames{indPP} '_Behaviour' obj.stim.timing '.mat']), 'tmpBehaviour', '-v7.3');
-
                     obj.behaviour{indPP} = tmpBehaviour;
                     
                     fprintf('\n')
                 else
-                    load(fullfile(currOutputBehaviour, [obj.ppNames{indPP} '_Behaviour' obj.stim.timing '.mat']), 'tmpBehaviour');
+                    load(currOutput, 'tmpBehaviour');
+                    
                     obj.behaviour{indPP} = tmpBehaviour;
                     
                 end
@@ -1501,12 +1498,10 @@ classdef dataAnalysis < handle
             if ~exist('qps', 'var');  qps = 0.5; end
             if ~exist('theseCond', 'var'); theseCond = 1:length(obj.conditions); end
             
-            
             for indPP = 1:length(obj.ppNames)
                 obj.behaviour{indPP}.RT(obj.behaviour{indPP}.RT == 0) = NaN;
                 % remove all the 'early' response
                 indEarly = obj.behaviour{indPP}.RT <= obj.stim.RTCutOff;
-                 indEarly = obj.behaviour{indPP}.RT <= obj.stim.RTCutOff;
                 %obj.behaviour{indPP}.Early = zeros(size(indEarly,1),1);
                 
                 if any(indEarly(:))
@@ -1532,14 +1527,18 @@ classdef dataAnalysis < handle
                     obj.behaviour{indPP}.Reaction(find(indEarly)) = NaN;
                     obj.behaviour{indPP}.Misses(any(indEarly,2)) = 1; 
                  
-                    %}
                 end
+                
                 if firstRT
                     % only get the first response that is larger then
                     % the RT cutoff
-                    for indTrial = find(~obj.behaviour{indPP}.Misses)'
-                        if  ~isempty(find(~isnan(obj.behaviour{indPP}.RT(indTrial,:)),1))
-                            obj.behaviour{indPP}.RT(indTrial,1) = obj.behaviour{indPP}.RT(indTrial, find(~isnan(obj.behaviour{indPP}.RT(indTrial,:)),1));
+                    for indTrial = find(~obj.behaviour{indPP}.Misses(:,1))'
+                        try
+                            if  ~isempty(find(~isnan(obj.behaviour{indPP}.RT(indTrial,:)),1))
+                                obj.behaviour{indPP}.RT(indTrial,1) = obj.behaviour{indPP}.RT(indTrial, find(~isnan(obj.behaviour{indPP}.RT(indTrial,:)),1));
+                            end
+                        catch
+                            keyboard
                         end
                     end
                     obj.behaviour{indPP}.RT(:,2:end) = [];
@@ -1953,7 +1952,9 @@ classdef dataAnalysis < handle
                                 ERP(indChan,timeSeries(1):timeSeries(end)+ diff(timeSeries(1:2))-1, indEpoch) = interp(downERD(indChan,:, indEpoch), diff(timeSeries(1:2)));
                             end
                         end
-                        ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
+                        if BaselineCorrect
+                            ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
+                        end
                     end
                     
                     % calculated ERP topography
@@ -2014,7 +2015,7 @@ classdef dataAnalysis < handle
                 load(currTopo,  'ERPTopo', 'ERPTopoFA');
                 
                 if ischar(Elec)
-                    load(currTopo,  'Elec');
+                    %load(currTopo,  'Elec');
                     tmpChan = split(Elec); clear Elec;
                     for indChan = 1:length(tmpChan)
                         Elec(indChan) = find(strcmp(tmpChan{indChan}, obj.eeg.ChannelsName));
@@ -2295,7 +2296,10 @@ classdef dataAnalysis < handle
                             if BaselineCorrect == 1
                                 tmpBaseline = nanmean(plotTarget(indChanComb,obj.eeg.targetEpoch >= obj.eeg.baseline(1) & obj.eeg.targetEpoch <= obj.eeg.baseline(2),indEpoch,indPP),2);
                             elseif BaselineCorrect == 2
-                                tmpBaseline = nanmean(plotResponse(indChanComb,obj.eeg.responseEpoch >= obj.eeg.baseline(1) & obj.eeg.responseEpoch <= obj.eeg.baseline(2),indEpoch,1, indPP),2);
+                                
+                                % forLaterBaseline(indChanComb,indEpoch) = nanmean(plotResponse(indChanComb,obj.eeg.responseEpoch >= obj.eeg.baseline(1) & obj.eeg.responseEpoch <= obj.eeg.baseline(2),indEpoch,1, indPP),2);
+                                tmpBaseline = 0;
+
                             else
                                 tmpBaseline = 0;
                             end
@@ -2307,19 +2311,23 @@ classdef dataAnalysis < handle
                             
                             for indFA = 1:size(obj.behaviour{indPP}.FalseAlarm,2)
                                 if obj.behaviour{indPP}.FalseAlarm(indEpoch,indFA)
+                                    try
                                     isNotNaN = ~isnan(ERPFA(indChanComb,:,indEpoch,indFA,indPP));
                                     plotFA(indChanComb,isNotNaN,indEpoch,indFA,indPP) = filtfilt(b,a, ERPFA(indChanComb,isNotNaN,indEpoch,indFA,indPP));
+                                    catch
+                                        keyboard
+                                    end
                                 end
                             end
                         end
                     end
-                    
+                     
                     if  obj.DetectOrDisc && size(plotTarget, 1) > 1
                         
-                        plotResponse (1,:,obj.behaviour{indPP}.Reaction == 1 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
-                        plotResponse (2,:,obj.behaviour{indPP}.Reaction == 2 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
-                        plotResponse (:,:,obj.behaviour{indPP}.Reaction == 0, :,indPP) = nan;
-                        
+%                         plotResponse (1,:,obj.behaviour{indPP}.Reaction == 1 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
+%                         plotResponse (2,:,obj.behaviour{indPP}.Reaction == 2 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
+%                         plotResponse (:,:,obj.behaviour{indPP}.Reaction == 0, :,indPP) = nan;
+%                         
                         plotTarget(1,:,:,indPP)     = nanmean(plotTarget(:,:,:,indPP),1);
                         plotResponse(1,:,:,:,indPP) = nanmean(plotResponse(:,:,:,:,indPP),1);
                     end
@@ -2345,7 +2353,7 @@ classdef dataAnalysis < handle
                 
                 % plot grand-averages (1 is always plot individual)!
                 if  plotThis ~= 1
-                    fig = obj.plotAverageTimeseries(plotTarget(1,:,:,:), plotResponse(1,:,:,:,:), plotFA, BaselineCorrect,plotName, plotComb, grouping, plotThis);  % plot these average.
+                    fig = obj.plotAverageTimeseries(plotTarget(1,:,:,:), plotResponse(1,:,:,:,:), plotFA, BaselineCorrect, plotName, plotComb, grouping, plotThis);  % plot these average.
                     for indHandle = 1:length(fig.Handle)
                         
                         figure(fig.Handle{indHandle})
@@ -2484,21 +2492,28 @@ classdef dataAnalysis < handle
                 for indPP = 1:length(obj.ppNames)
                     
                     % 2) baseline-correct the trials if indicated
-                    % remove baseline
+                    % remove baseline 
+                    if size(ERPResponse,1) > 1
+%                         if size(ERPResponse,1) > 1
+%                             ERPResponse (1,:,obj.behaviour{indPP}.Reaction == 1 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
+%                             ERPResponse (2,:,obj.behaviour{indPP}.Reaction == 2 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
+%                             ERPResponse (:,:,obj.behaviour{indPP}.Reaction == 0, :,indPP) = nan;
+%                         end
+                        ERPResponse(1,:,:,:,indPP) = nanmean(ERPResponse(:,:,:,:,indPP),1);
+                        ERPTarget(1,:,:,indPP)   = nanmean(ERPTarget(:,:,:,indPP),1);
+                    end
+                    
                     if BaselineCorrect == 1
-                        tmpBaseline = nanmean(ERPTarget(:, obj.eeg.targetEpoch >= obj.eeg.baseline(1) & obj.eeg.targetEpoch <= obj.eeg.baseline(2), :, indPP),2);
+                        tmpBaseline = nanmean(ERPTarget(1, obj.eeg.targetEpoch >= obj.eeg.baseline(1) & obj.eeg.targetEpoch <= obj.eeg.baseline(2), :, indPP),2);
                     elseif BaselineCorrect == 2
-                        if size(ERPResponse,1) > 1
-                            plotResponse (1,:,obj.behaviour{indPP}.Reaction == 1 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
-                            plotResponse (2,:,obj.behaviour{indPP}.Reaction == 2 & obj.behaviour{indPP}.Correct, :,indPP) = nan;
-                            plotResponse (:,:,obj.behaviour{indPP}.Reaction == 0, :,indPP) = nan;
-                        end
                         
-                        tmpBaseline = nanmean(ERPResponse(:, obj.eeg.responseEpoch >= obj.eeg.baseline(1) & obj.eeg.responseEpoch <= obj.eeg.baseline(2), :, 1, indPP),2);
+%                         tmpBaseline = nanmean(ERPResponse(:, obj.eeg.responseEpoch >= obj.eeg.baseline(1) & obj.eeg.responseEpoch <= obj.eeg.baseline(2), :, 1, indPP),2);
+                        tmpBaseline = 0;
                     else
                         tmpBaseline = 0;
                     end
-                    
+                   
+                                            
                     ERPTarget(:,:,:,indPP)     = ERPTarget(:,:,:, indPP)    - repmat(tmpBaseline,1,size(ERPTarget,2),1);
                     ERPResponse(:,:,:,:,indPP) = ERPResponse(:,:,:,:,indPP) - repmat(tmpBaseline,1,size(ERPResponse,2),1, size(ERPResponse,4));
                 end
@@ -2518,8 +2533,6 @@ classdef dataAnalysis < handle
                     
                     timeSeries{1} = obj.eeg.responseEpoch(PeakArea);
                     timeSeries{2} = obj.eeg.responseEpoch(slopeArea);
-                    ERPResponse(1,:,:,:,:) = nanmean(ERPResponse, 1);
-                    
                     Signal(1,:,:,:)  = squeeze(ERPResponse(:,:,:,1,:));
                 end
                 if size(Signal, 1) > 1
@@ -2573,7 +2586,7 @@ classdef dataAnalysis < handle
                                 % get equal size bins
                                 if isempty(qps)
                                     tmpRTqps = discretize(tmpRT, [0 max(tmpRT)], 'IncludedEdge','right');
-                                    tmpRTqps(isnan(tmpRTqps))   = length(qps)+2; % add the misses
+                                    tmpRTqps(isnan(tmpRTqps)) =  length(qps)+2; % add the misses
                                 else
                                     tmpRTqps = discretize(tmpRT, [0 quantile(tmpRT,qps)-0.5/60 max(tmpRT)], 'IncludedEdge','right');
                                     tmpRTqps(isnan(tmpRTqps))   = length(qps)+2; % add the misses
@@ -2586,6 +2599,11 @@ classdef dataAnalysis < handle
                                 % extract the aligned ERPs for Amplitude
                                 % and slope extraction
                                 signalPeak  = squeeze(Signal(:,:,tmpCond,indPP)); 
+                                if BaselineCorrect == 2
+                                    tmpBaseline = nanmean(nanmean(ERPResponse(1, obj.eeg.responseEpoch >= obj.eeg.baseline(1) &...
+                                        obj.eeg.responseEpoch <= obj.eeg.baseline(2), tmpCond, 1, indPP),2),3);
+                                    signalPeak = signalPeak - tmpBaseline;
+                                end
                                 
                                 % now extract all mean peak amplitudes
                                 if PeakMeanOrMax(1) == 1
@@ -2605,8 +2623,10 @@ classdef dataAnalysis < handle
                                 
                                 % first also get quick slope determining if
                                 % it is negative to exclude trials.
-                                signalSlope = squeeze(Signal(:,:,tmpCond,indPP)); signalSlope = sgolayfilt(signalSlope,1,51,[],1);
                                 
+                                signalSlope = squeeze(Signal(:,:,tmpCond,indPP)); signalSlope = sgolayfilt(signalSlope,1,51,[],1);
+                                 
+
                                 clear tmpSlope
                                 for indEpoch = 1:length(tmpRT)
                                     if ~isnan(tmpRT(indEpoch))
@@ -2652,7 +2672,7 @@ classdef dataAnalysis < handle
                                         waveform.peakLatency(indPP, acc) = NaN;
                                         
                                     elseif PeakMeanOrMax(1) == 1 && ~isempty(currQps) && ~isnan(waveform.RT(indPP,acc))
-                                        
+                                    
                                         waveform.peak(indPP, acc)        = nanmean(nanmean(signalPeak(PeakArea,currQps),1),2);
                                         waveform.peakLatency(indPP, acc) = nanmean(timeSeries{1});
                                         
@@ -2696,11 +2716,11 @@ classdef dataAnalysis < handle
                             end
                         end
                         
-                        tbl.ppNames      = [tbl.ppNames;    repmat(indPP, size(currtblRT))];
-                        tbl.RT           = [tbl.RT;         nanzscore(currtblRT)];
-                        tbl.zScoreRT     = [tbl.zScoreRT;   currtblzScoreRT];
-                        tbl.Slopes       = [tbl.Slopes;     currtblSlopes];
-                        tbl.Peak         = [tbl.Peak;       currtblPeak];
+                        tbl.ppNames      = [tbl.ppNames;     repmat(indPP, size(currtblRT))];
+                        tbl.RT           = [tbl.RT;          nanzscore(currtblRT)];
+                        tbl.zScoreRT     = [tbl.zScoreRT;    currtblzScoreRT];
+                        tbl.Slopes       = [tbl.Slopes;      currtblSlopes];
+                        tbl.Peak         = [tbl.Peak;        currtblPeak];
                         tbl.PeakLatency	 = [tbl.PeakLatency; currtblPeakLatency];
                         
                     end
@@ -2755,11 +2775,17 @@ classdef dataAnalysis < handle
                 within.Table(noEnoughPP,:) = [];
                 waveform.RT(:,noEnoughPP)  = [];
                 waveform.peak(:,noEnoughPP)  = [];
-                
+                waveform.slopes(:,noEnoughPP)  = [];
+
                 % remove within-participant variability.
                 indMean   = repmat(nanmean(waveform.peak,2), 1, size(waveform.peak,2));
                 grandMean = nanmean( waveform.peak(:));
                 waveform.peak = waveform.peak - indMean + grandMean;
+                
+                
+                indMean   = repmat(nanmean(waveform.slopes,2), 1, size(waveform.slopes,2));
+                grandMean = nanmean( waveform.slopes(:));
+                waveform.slopes = waveform.slopes - indMean + grandMean;
                 
                 if any(strcmp(within.Name, 'RTs'))
                     posCombination = unique(within.Condition(:,1:end-1), 'row');
@@ -2768,13 +2794,19 @@ classdef dataAnalysis < handle
                 end
                 
                 [rm.Peak, results.Peak] = preformRANOVA(obj, fileID, 'Peak Amplitude', strCond,  waveform.peak, between, within, modelFun);
+                [rm.Slopes, results.Slopes] = preformRANOVA(obj, fileID, 'Slopes Amplitude', strCond,  waveform.slopes, between, within, modelFun);
+
                 rm.RT = preformRANOVA(obj, fileID, 'RT Amplitude', strCond,  waveform.RT, between, within, modelFun);
                 
                 if sum(~within.Par)
                     plotData   = margmean(rm.Peak, {within.Name between.Name{1}});
+                    plotSlopes   = margmean(rm.Slopes, {within.Name between.Name{1}});
+
                     plotRT     = margmean(rm.RT, {within.Name between.Name{1}});
                 else
                     plotData   = margmean(rm.Peak, within.Name);
+                    plotSlopes   = margmean(rm.Slopes, within.Name);
+
                     plotRT     = margmean(rm.RT, within.Name);
                 end
                 
@@ -2787,14 +2819,38 @@ classdef dataAnalysis < handle
                     clear averageSignal stdSignal averageRT
                     % NOTE THIS HAS BEEN LAZY CODING! AND REALLY NEEDS TO
                     % BE CHANGED :'(
-                    errorbar([1 2]-0.1, plotData.Mean([1 2]), plotData.StdErr([1 2]), 'LineWidth', 1, 'LineStyle', '-.',...
-                        'Color', obj.figLayOut.colours(2,:), 'Marker', '+')
-                    errorbar([1 2]+0.1, plotData.Mean([3 4]), plotData.StdErr([3 4]), 'LineWidth', 1, 'LineStyle', '-.',...
-                        'Color', obj.figLayOut.colours(4,:), 'Marker', '+')
+                    if size(within.Condition,1) == 4
+                        errorbar([1:2]-0.1, plotData.Mean([1 2]), plotData.StdErr([1 2]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(2,:), 'Marker', '+')
+                        errorbar([1:2]+0.1, plotData.Mean([3 4]), plotData.StdErr([3 4]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(4,:), 'Marker', '+')
+                        
+                        xlim([1-0.2 2+0.2])
+                        xticks([1 2])
+                        %}
+                    elseif size(within.Condition,1) == 8
+                        errorbar([1:4]-0.1, plotData.Mean([1:4]), plotData.StdErr([1:4]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(1,:), 'Marker', '+')
+                        errorbar([1:4]+0.1, plotData.Mean([5:8]), plotData.StdErr([5:8]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(2,:), 'Marker', '+')
+                        xlim([1-0.2 4+0.2])
+                        
+                        xticks([1:4])
+                    elseif size(within.Condition,1) == 16
+                        keyboard
+                         errorbar([1:4]-0.2, plotData.Mean([1:4]), plotData.StdErr([1:4]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(1,:), 'Marker', '+')
+                        errorbar([1:4]-0.1, plotData.Mean([5:8]), plotData.StdErr([5:8]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(2,:), 'Marker', '+')
+                           errorbar([1:4]+0.1, plotData.Mean([9:12]), plotData.StdErr([9:12]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(3,:), 'Marker', '+')
+                       errorbar([1:4]+0.2, plotData.Mean([13:16]), plotData.StdErr([13:16]), 'LineWidth', 1, 'LineStyle', '-.',...
+                            'Color', obj.figLayOut.colours(4,:), 'Marker', '+')
                     
-                    xlim([1-0.2 2+0.2])
-                    xticks([1 2])
-                    
+                        xlim([1-0.2 4+0.2])
+                        
+                        xticks([1:4])
+                    end
                     xticklabels({obj.figLayOut.legNames{plotComb(2)}{:}});
                     xlabel(' ');
                     
@@ -2827,6 +2883,27 @@ classdef dataAnalysis < handle
                         ylim([amplitudeAxis]);
                     end
                     plotSave(gca, ['amplitude' plotName '.png'], hereFigFolder, obj.figLayOut.saveDim);
+                    
+                    figure; hold on
+
+                    posCombination = categorical(posCombination);
+                    for indCond = 1: within.numCond
+                        currPlot   = all( table2array ( plotData(:,1:size(posCombination,2))) == categorical(posCombination(indCond,:)), 2);
+                        averageRT(indCond, :)     = plotRT.Mean(currPlot);
+                        averageSignal(indCond, :) = plotSlopes.Mean(currPlot);
+                        stdSignal(indCond, :)     = plotSlopes.StdErr(currPlot);
+                        
+                        legendThis(indCond) = errorbar(averageRT(indCond,:), averageSignal(indCond,:), stdSignal(indCond,:));
+                        legendThis(indCond).Color = obj.figLayOut.colours(indCond,:);
+                        legendThis(indCond).LineWidth = 1;
+                        legendThis(indCond).LineStyle = obj.figLayOut.lineType{indCond};
+                        legendThis(indCond).Marker = '.';
+                    end
+                    
+                    if ~isempty(amplitudeAxis)
+                        ylim([amplitudeAxis]);
+                    end
+                    plotSave(gca, ['slopes' plotName '.png'], hereFigFolder, obj.figLayOut.saveDim);
                 end
             end
         end
@@ -3762,7 +3839,7 @@ classdef dataAnalysis < handle
             % extracted the means per participant per conditions
             meanTarget    = nan(size(Target, 1), size(Target, 2), within.numCond, length(obj.ppNames));
             meanMisses    = nan(size(Target, 1), size(Target, 2), within.numCond, length(obj.ppNames));
-            meanResponse  = nan(size(Response, 1), size(Response, 2), within.numCond, size(Response, 4), length(obj.ppNames));
+            meanResponse  = nan(size(Response, 1), size(Response, 2), within.numCond, length(obj.ppNames));
             meanFA        = nan(size(falseAlarms, 1), size(falseAlarms, 2), within.numCond, length(obj.ppNames));
             
             % extracted the means per participant per conditions
@@ -3800,39 +3877,48 @@ classdef dataAnalysis < handle
                 
                 for indCond  = 1:size(posCombination,1)
                     
-                    currCond = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.Early),:,indPP) == posCombination(indCond,:),2) == size(posCombination, 2) & ...
-                        ~obj.behaviour{indPP}.Early;
+                    currCond = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.RT),:,indPP) == posCombination(indCond,:),2) == size(posCombination, 2);
                     
                     currRT = reshape(obj.behaviour{indPP}.RT(currCond,:),[],1);
                     meanRTs(indCond) = nanmedian(currRT);
                     
                     % remove all conditions that didn't have a
                     % response, e.g. the nans.
-                    if plotThis == 2 || plotThis == 5
-                        currCondHits = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.Early),:,indPP) == posCombination(indCond,:),2) ==...
+                    
+                    meanResponse(:,:, indCond, indPP) = nanmean(reshape(Response(:,:,currCond,:, indPP), size(Response,1),size(Response,2),[]),3);
+                    
+                    if baselineCorrect == 2
+                        tmpBaseline = nanmean(meanResponse(:,obj.eeg.responseEpoch >= obj.eeg.baseline(1) & obj.eeg.responseEpoch <= obj.eeg.baseline(2),indCond,indPP),2);
+                    else
+                        tmpBaseline = 0;
+                    end
+                    
+                    meanResponse(:,:, indCond, indPP) = nanmean(reshape(Response(:,:,currCond,:, indPP), size(Response,1),size(Response,2),[]) - tmpBaseline,3);
+                    stdResponse(:,:, indCond, indPP)  = nanstd(reshape(forStdResponse(:,:,currCond,:), size(Response,1),size(Response,2),[]) - tmpBaseline,[],3);
+               
+                    
+                    if plotThis == 2 || plotThis == 4
+                        currCondHits = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.RT),:,indPP) == posCombination(indCond,:),2) ==...
                             size(posCombination, 2) &...
-                            ~obj.behaviour{indPP}.Misses & ...
-                            ~obj.behaviour{indPP}.Early;
-                        meanTarget(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCondHits, indPP),3);
-                        stdTarget(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCondHits),[],3);
+                            ~obj.behaviour{indPP}.Misses;
+                        meanTarget(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCondHits, indPP) - tmpBaseline,3);
+                        stdTarget(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCondHits) - tmpBaseline,[],3);
                         
-                        currCondMisses = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.Early),:,indPP) == posCombination(indCond,:),2) == size(posCombination, 2) &...
-                            obj.behaviour{indPP}.Misses & ...
-                            ~obj.behaviour{indPP}.Early;
+                        currCondMisses = sum(allTrialMatrix(1:length(obj.behaviour{indPP}.RT),:,indPP) == posCombination(indCond,:),2) == size(posCombination, 2) &...
+                            obj.behaviour{indPP}.Misses;
                         
                         if sum(currCondMisses) > 5
-                            meanMisses(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCondMisses, indPP),3);
-                            stdMisses(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCondMisses),[],3);
+                            meanMisses(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCondMisses, indPP) - tmpBaseline,3);
+                            stdMisses(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCondMisses) - tmpBaseline,[],3);
                         end
                         allMisses(indCond, indPP) = sum(currCondMisses);
                     else
-                        meanTarget(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCond, indPP),3);
-                        stdTarget(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCond),[],3);
+                        meanTarget(:,:, indCond, indPP)	  = nanmean(Target(:,:, currCond, indPP) - tmpBaseline,3);
+                        stdTarget(:,:, indCond, indPP)	  = nanstd(forStdTarget(:,:, currCond) - tmpBaseline,[],3);
                     end
                     
-                    meanResponse(:,:, indCond, indPP) = nanmean(reshape(Response(:,:,currCond,:, indPP), size(Response,1),size(Response,2),[]),3);
-                    stdResponse(:,:, indCond, indPP)  = nanstd(reshape(forStdResponse(:,:,currCond,:), size(Response,1),size(Response,2),[]),[],3);
-                    
+               
+                        
                     allFA(indCond, indPP) = allFA(indCond) + sum(sum(obj.behaviour{indPP}.FalseAlarm(currCond,:)));
                     
                     if sum( sum(sum(obj.behaviour{indPP}.FalseAlarm(currCond,:)))) > 1
@@ -4698,7 +4784,7 @@ classdef dataAnalysis < handle
         function [shortFFT, timeSeries] = shortfft(obj, ERP, intFreq)
             
             if isfield(obj.stim, 'freqSSVEP')
-                windowSize = (8 * (1/obj.stim.freqSSVEP));
+                windowSize = (4 * (1/obj.stim.freqSSVEP));
             else
                 windowSize = 0.2;
             end
