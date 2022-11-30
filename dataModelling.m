@@ -188,7 +188,7 @@ classdef dataModelling < handle
             reflectingBound = obj.modelBehaviour.reflectingBound;
 
             % get timing parameters
-            dt = 1/obj.stim.refreshRate;      % sample period
+            dt = obj.stim.duration/obj.stim.refreshRate;      % sample period
             maxRT = obj.stim.RTdeadLine(end); % the upper limit for RTs to be classed as hits
             minRT = obj.stim.RTCutOff;        % minium allowable RT to call a response a 'hit', in msec. There was only one RT in the S blocks across all subjects that was shorter than this, and next shortest was nearly 100 ms later
             
@@ -287,12 +287,7 @@ classdef dataModelling < handle
                     % difficulty levels to get the right drift rate
                     timeLine = TOW{indBlock}(:,1)';
                     timeLine(timeLine ~= 0) = currDrift(abs(timeLine(timeLine ~= 0)));
-                    
-                    if obj.DetectOrDisc
-                        direction = TOW{indBlock}(:,1)';
-                        timeLine(direction < 1) = timeLine(direction < 1)*-1;
-                    end
-                    
+                  
                     sensEv = timeLine + currTrialNoise.*noise(indBlock,1:length(TOW{indBlock}), indNoise);
                     
                     % initalization of parameters. 
@@ -301,10 +296,6 @@ classdef dataModelling < handle
                     
                     RespT   = []; % keep track of all responses times
                     targT   = []; % keep track of all targets onset times
-                    
-                    if obj.DetectOrDisc
-                        Resp = [];  % keep track of all actual response
-                    end
                     
                     DVendval = nan; 
                     
@@ -340,29 +331,17 @@ classdef dataModelling < handle
                         end
                         
                         % Detect target transitions
-                        if abs(TOW{indBlock}(indTime)) > abs(TOW{indBlock}(indTime-1))
+                        if TOW{indBlock}(indTime) > TOW{indBlock}(indTime-1)
                             targT = [targT indTime*dt];
                         end
                         
                         % Detect responses: This is when the DV crosses the
                         % bound. 
                         if indTime > lastresp+postRespPause 
-                            if obj.DetectOrDisc
-                                if abs(DV(indTime)) > currBound     % TODO for disc task < -currBound beside RespT check if correct or mistake.
-                                    RespT    = [RespT indTime*dt + MT];    % log the response after adding the non-decision time
-                                    lastresp = indTime;                 % and now this is the last response that happened, at sample n
-                                   
-                                    if sign(DV(indTime)) == sign(TOW{indBlock}(indTime))
-                                        Resp = [Resp 1];
-                                    else
-                                        Resp = [Resp 0];
-                                    end
-                                end
-                            else
-                                if DV(indTime) > currBound 
-                                    RespT    = [RespT indTime*dt+MT];   % log the response after adding the non-decision time
-                                    lastresp = indTime;                 % and now this is the last response that happened, at sample n
-                                end
+                            
+                            if DV(indTime) > currBound
+                                RespT    = [RespT indTime*dt+MT];   % log the response after adding the non-decision time
+                                lastresp = indTime;                 % and now this is the last response that happened, at sample n
                             end
                         end
                     end
@@ -375,23 +354,12 @@ classdef dataModelling < handle
                     for indTarget = 1:length(targT)
                         nextrespind = find(RespT > targT(indTarget) + minRT & RespT < targT(indTarget) + maxRT, 1); % find the index of the next response which is within the allowable @hit@ window
                         if ~isempty(nextrespind) 
-                            if obj.DetectOrDisc
-                                simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) hit RespT(nextrespind)-targT(indTarget) Resp(nextrespind)]; % 1 = hit
-                            else
-                                simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) hit RespT(nextrespind)-targT(indTarget)]; % 1 = hit
-                            end
+                            simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) hit RespT(nextrespind)-targT(indTarget)]; % 1 = hit
                         else % if there WAS no next response, set the response parameters for this trial as 'not a number'
-                            if obj.DetectOrDisc
-                                simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) miss nan nan]; % 2 = miss
-                            else
-                                simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) miss nan];
-                            end
+                            simdat  = [simdat; trialMatrix{indBlock}(indTarget,:) miss nan];
                         end
                         
-                        if getsimDV == 1 % simulated the decision variable for plotting (possible for modelling)
-                        % As we are exploring possible ways to use Neural data to inform our models and/or validate our
-                        % models we can also use the DV (e.g. accumulated decision variable) to simulated how targets/responses
-                        % would look like. This is done here. 
+                        if getsimDV == 1
                             if (targT(indTarget)/dt) + ceil((obj.stim.targetEpoch(end))/dt) < length(DV)
                                 DecValue.Target(1:length(targetPlot),acc) = DV(round(targT(indTarget)/dt) + targetPlot);
                                 
@@ -426,15 +394,10 @@ classdef dataModelling < handle
                         nextrespind = find(RespT > ITIstartT(indITI)+maxRT-(obj.stim.duration) & RespT < endtime); % find indices of responses the ITI window, ruling out any at the very start that are within the hit window from the previous target. Target duration is 1 sec, so fs in sample points
                         
                         for m = 1:length(nextrespind)
-                            if obj.DetectOrDisc
-                                simdat  = [simdat; trialMatrix{indBlock}(indITI,:) false_alarm RespT(nextrespind(m))-endtime  Resp(nextrespind(m))];
-                            else
-                                simdat  = [simdat; trialMatrix{indBlock}(indITI,:) false_alarm RespT(nextrespind(m))-endtime];
-                            end
+                            simdat  = [simdat; trialMatrix{indBlock}(indITI,:) false_alarm RespT(nextrespind(m))-endtime];
                             
                             if getsimDV == 1
                                 DecValue.Target(1:length(targetPlot),acc)   = nan;
-                                
                                 try
                                     DecValue.Response(1:length(responsePlot),acc) = DV(round(RespT(nextrespind(m))/dt) + responsePlot);
                                 catch
@@ -512,17 +475,9 @@ classdef dataModelling < handle
             
             
             %% ---------- extract behaviour ------------------------------
-            if obj.DetectOrDisc
-                cond       = simdat(:,1:end-3);
-                outcome    = simdat(:,end-2);
-                RT         = simdat(:,end-1);
-                Response   = simdat(:,end);
-                Response(isnan(Response)) = 0;
-            else
-                cond       = simdat(:,1:end-2);
-                outcome    = simdat(:,end-1);
-                RT         = simdat(:,end);
-            end
+            cond       = simdat(:,1:end-2);
+            outcome    = simdat(:,end-1);
+            RT         = simdat(:,end);
             
             uniCond = unique(cond(all(cond ~= 0,2),:), 'rows');
             qps     = obj.modelBehaviour.qps;
@@ -548,19 +503,11 @@ classdef dataModelling < handle
                 meanTarget(:,indCond)   = nanmean(DV.Target(:, currCond & outcome == 1),2);
                 meanResponse(:,indCond) = nanmean(DV.Response(:, currCond & outcome == 1),2);
              
-                if obj.DetectOrDisc  % get only correct responses for the cummeliatve response function.
-                    currCorrect = all(cond == uniCond(indCond,:), 2)  & Response;
-                    currRT      = RT(currCorrect);
-                    
-                    currError   = all(cond == uniCond(indCond,:), 2)  & ~Response;
-                    currRTError = RT(currError);
-                end
-                
                 % 1) we'll get the average RT quantiles and numbers of trials in
                 % each quantile, including FAs, because this is the behavioural
                 % summary we wll try to fit. This is for Chi^2
                 % e.g. TODO which optimiziation function
-                q(indCond,:) = [0 quantile(currRT,qps)-0.5/60 max(currRT)];  % subtracted half of a refresh cycle just because response can only happen on each refresh, and setting the boundaries between quantile bins is then safer so > and >= don't give different results
+                q(indCond,:) = [0 quantile(currRT,qps)-0.5/60 obj.stim.RTdeadLine(end)];  % subtracted half of a refresh cycle just because response can only happen on each refresh, and setting the boundaries between quantile bins is then safer so > and >= don't give different results
                     
                 for indBin = 1:numBins
                     % number of trials in each of the 6 quantile bins
@@ -577,28 +524,11 @@ classdef dataModelling < handle
                     % We'll use 'qn' from above, to get the per-subject counts
                     pred.pij(indCond,indBin) = qn(indCond,indBin)/(currNumTrials);
                 end
-                                                
-                if obj.DetectOrDisc
-                    keyboard % TODO GET THE THREE BINS?
-                    for indQ = 1:3
-                        % number of trials in each of the 3 bins
-                        pred.pij(indCond,numBins+indQ)  =  sum(currRTError>datsum.q(indCond,numBins+1+indQ) & currRTError<=datsum.q(indCond,numBins+1+indQ+1))/currNumTrials;
-                    end
-                    if numBins ==  furtherIndex
-                        furtherIndex = size(pred.pij,2)+1;
-                    end
-                end
-
+                
                 pred.pij(indCond,furtherIndex) = sum(currMisses)/currNumTrials;
 
                 % then add a final bin that counts the false alarms:
                 pred.pij(indCond,furtherIndex+1) = sum(currFA)/(datsum.nShortestITI(indCond)*obj.modelBehaviour.simulateMoreX);
-
-                if ~isempty(obj.stim.FACutOff)
-                    currFA = currRT(currOutcome == 3);
-                    currFA = currFA > obj.stim.FACutOff;
-                    pred(indCond,furtherIndex+2) = sum(currFA)/currNumTrials;
-                end
 
                 % note the min(1, .. limiter makes sure the proportion doesn't go above 1, which causes complex G-squared
                 % values. I *think* this also might mean the starting vectors that are really far off in that they produce way
@@ -662,17 +592,16 @@ classdef dataModelling < handle
                 
                 bb = bar(indCond, pred.pij(indCond,furtherIndex));
                 set(bb,'FaceColor', obj.figLayOut.colours(indCond,:), 'FaceAlpha', 0.3)
+                errorbar(indCond, pred.pij(indCond,furtherIndex), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
                 
-                plot(indCond, datsum.pij(indCond,furtherIndex),'o',...
+                plot(indCond, cumsum(datsum.pij(indCond,furtherIndex)),'o',...
                     'MarkerEdgeColor', [1 1 1],...
                     'MarkerFaceColor', obj.figLayOut.colours(indCond,:),...
                     'LineWidth', obj.figLayOut.lineWidth)
-               errorbar(indCond, datsum.pij(indCond,furtherIndex), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
-
             end
             
             ylim([0 figInfo.YLim(end)])
-            ylabel({'Proportion' 'misses'})
+            ylabel('Proportion')
             title(sprintf('%s (%0.1f)', modelName, err))
             
             set(gca,'FontSize', obj.figLayOut.letterSize);
@@ -690,17 +619,16 @@ classdef dataModelling < handle
                 
                 bb = bar(indCond, pred.pij(indCond,furtherIndex+1));
                 set(bb,'FaceColor', obj.figLayOut.colours(indCond,:), 'FaceAlpha', 0.3)
+                errorbar(indCond, pred.pij(indCond,furtherIndex+1), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
                 
-                plot(indCond, datsum.pij(indCond,furtherIndex+1),'o',...
+                plot(indCond, cumsum(datsum.pij(indCond,furtherIndex+1)),'o',...
                     'MarkerEdgeColor', [1 1 1],...
                     'MarkerFaceColor', obj.figLayOut.colours(indCond,:),...
                     'LineWidth', obj.figLayOut.lineWidth)
-                    
-                errorbar(indCond, datsum.pij(indCond,furtherIndex+1), CI95,'k','LineWidth',obj.figLayOut.lineWidth)
             end
             
             ylim([0 figInfo.YLim(end)])
-            ylabel({'Proportion' 'False Alarms'})
+            ylabel('Proportion')
             title(sprintf('%s (%0.1f)', modelName, err))
             
             set(gca,'FontSize', obj.figLayOut.letterSize);
@@ -932,14 +860,6 @@ classdef dataModelling < handle
                     currFA     = obj.behaviour{indPP}.FalseAlarm(currCond,:);
                     currRT     = obj.behaviour{indPP}.RT(currCond);
 
-                    if obj.DetectOrDisc  % get only correct responses for the cummeliatve response function. 
-                        currCorrect = all(currTrials(1:length(obj.behaviour{indPP}.Correct),:) == uniCond(indCond,:), 2)  & obj.behaviour{indPP}.Correct;
-                        currRT      = obj.behaviour{indPP}.RT(currCorrect);
-                        
-                        currError   = all(currTrials(1:length(obj.behaviour{indPP}.Correct),:) == uniCond(indCond,:), 2)  & ~obj.behaviour{indPP}.Correct;
-                        currRTError = obj.behaviour{indPP}.RT(currError);
-                    end
-                    
                     % 1) we'll get the average RT quantiles and numbers of trials in
                     % each quantile, including FAs, because this is the behavioural
                     % summary we wll try to fit. This is for Chi^2
@@ -953,45 +873,12 @@ classdef dataModelling < handle
                         qm(indCond,indQ,indPP) = median(currRT(currRT > q(indCond,indQ,indPP) & currRT <= q(indCond,indQ+1,indPP)));
                     end
                     
-                    if obj.DetectOrDisc
-                        % 20% bins for errors to the conditional accuracy functions (CAFs)
-                        % of each individual data set.
-                        % CAFs represent accuracy as a function of time. In
-                        % the Simon task, the incompatible condition is typically associated
-                        % with an early drop of accuracy, resulting in a
-                        % concave CAF shape (see Figure 5A, top). This particular
-                        % pattern implies that incorrect responses are faster than
-                        % correct responses. CAFs were constructed by sorting
-                        % the RT data into five bins of equal size; the proportion
-                        % of errors in each RT bin was then computed, providing
-                        % the error data considered in the fitting procedure
-                        q(indCond,numBins+2:numBins+2+3, indPP) = [0 quantile(currRTError, [1/3 2/3])-0.5/60  max(currRTError)];
-                        
-                        for indQ = 1:3
-                            % number of trials in each of the 5 bins
-                            qn(indCond,numBins+indQ,indPP)  = sum(currRTError > q(indCond,numBins+1+indQ,indPP) & currRTError <= q(indCond,numBins+1+indQ+1,indPP));
-                            
-                            % median RT within each quantile bin
-                            qm(indCond,numBins+indQ,indPP)  = median(currRTError(currRTError > q(indCond,numBins+1+indQ,indPP) & currRTError <= q(indCond,numBins+1+indQ+1,indPP)));
-                        end
-                        
-                        if numBins ==  furtherIndex
-                            furtherIndex = length(qn)+1;
-                        end
-                    end
-                    
                     % add a  bin that counts the Misses:
                     qn(indCond,furtherIndex,indPP)   = sum(isnan(currRT));
                     
                     % add a final bin that counts the false alarms:
                     qn(indCond,furtherIndex+1,indPP) = sum(currFA(:));
                        
-                    if ~isempty(obj.stim.FACutOff)                  
-                        limitedFalseAlarm = obj.behaviour{indPP}.FalseAlarm;                 
-                        limitedFalseAlarm(obj.behaviour{indPP}.indFalseAlarm < obj.stim.FACutOff) = 0;      
-                        qn(indCond,furtherIndex+2,indPP) = sum(sum(limitedFalseAlarm(currCond,:)));
-                    end
-
                     % 2) Now convert the counts data into proportions so we can compute G^2
                     % conveniently, ALL subjects did exactly the sae number of targets, 288 in
                     % total, 72 for each of the four main conditions. So we can get proportions
@@ -1040,29 +927,13 @@ classdef dataModelling < handle
             datsum.pij(:,furtherIndex+1) = datsum.qn (:,furtherIndex+1)./nanmean(nShortestITI,2);
        
             % Average across subjects and put in the structure:
-            %{   
-            datsum.pij = nanmean(pij,3);
-
-            if obj.DetectOrDisc
-                datsum.qCAF  = nanmean(qCAF,3); % so q are the RT values separating the bins
-                datsum.qnCAF  = nanmean(qnCAF,3); % so q are the RT values separating the bins
-                datsum.pCAF  = nanmean(pCAF,3); % so q are the RT values separating the bins
-                datsum.mCAF  = nanmean(mCAF,3);  % and qn are the average number of trials in each bin
-            end
-            %}
-           
+      
             % standard deviation.
             for indPP = 1:length(obj.ppNames)
                 qstd(:,:,indPP)     = (q(:,:,indPP)  - nanmean(reshape(q(:,:,indPP),1,[])));
                 qnstd(:,:,indPP)    = qn(:,:,indPP)  - nanmean(reshape(qn(:,:,indPP),1,[]));
                 qmstd(:,:,indPP)    = qm(:,:,indPP)  - nanmean(reshape(qm(:,:,indPP),1,[]));
                 pijstd(:,:,indPP)   = pij(:,:,indPP) - nanmean(reshape(pij(:,:,indPP),1,[]));
-                %{
-                if obj.DetectOrDisc
-                    pCAFstd(:,:,indPP) = pCAF(:,:,indPP) - nanmean(reshape(pCAF(:,:,indPP),1,[])); % so q are the RT values separating the bins
-                    mCAFstd(:,:,indPP) = mCAF(:,:,indPP) - nanmean(reshape(mCAF(:,:,indPP),1,[]));   % and qn are the average number of trials in each bin
-                end
-               %}
             end
             
             datsum.qstd  = nanstd(qstd,[],3);  % so q are the RT values separating the bins
@@ -1072,13 +943,6 @@ classdef dataModelling < handle
             % Average across subjects and put in the structure:
             datsum.pijstd = nanstd(pijstd,[],3);
            
-            %{
-            if obj.DetectOrDisc
-                datsum.pCAFstd = nanstd(pCAFstd,[],3); % so q are the RT values separating the bins
-                datsum.mCAFstd = nanstd(mCAFstd,[],3);   % and qn are the average number of trials in each bin
-            end
-            %}
-            
             obj.modelBehaviour.datsum = datsum;
             
             %% Quantile probability plots
@@ -1141,9 +1005,6 @@ classdef dataModelling < handle
                 
                 figMisses = figure; 
                 figFA = figure; 
-                if ~isempty(obj.stim.FACutOff)
-                    figFAcut = figure;
-                end
                 
                 dist = -0.1:0.2/(size(datsum.q, 1)-1):0.1;
                 for indCond = 1:size(datsum.q, 1)
@@ -1158,15 +1019,7 @@ classdef dataModelling < handle
                     bb2.FaceColor = obj.figLayOut.colours(indCond,:);
                     CI95 = 1.96.*(datsum.pijstd(indCond,furtherIndex+1)./sqrt(length(obj.ppNames)));
                     errorbar(1 + dist(indCond), datsum.pij(indCond, furtherIndex+1), CI95, 'Color', [0 0 0])
-                    
-                    if ~isempty(obj.stim.FACutOff)
-                        figure(figFAcut);hold on
-                        bb2 = bar(1 + dist(indCond), datsum.pij(indCond, furtherIndex+2),0.05);
-                        bb2.FaceColor = obj.figLayOut.colours(indCond,:);
-                        CI95 = 1.96.*(datsum.pijstd(indCond,furtherIndex+2)./sqrt(length(obj.ppNames)));
-                        errorbar(1 + dist(indCond), datsum.pij(indCond, furtherIndex+2), CI95, 'Color', [0 0 0])
-                    end
-                end
+                                    end
                 
                 figure(figMisses);hold on
                 ylim([0 1.05])
@@ -1188,46 +1041,7 @@ classdef dataModelling < handle
                 
                 set(gca,'FontSize', obj.figLayOut.letterSize);
                 set(gca,'FontName', obj.figLayOut.letterType);
-                if ~isempty(obj.stim.FACutOff)
-                    figure(figFAcut);hold on
-                    ylim([0 1.05])
-                    
-                    ylim([0 0.5]);
-                    yticks(0:0.25:0.5);
-                    ax1 = gca;
-                    ax1.YAxis.Visible = 'off'; 
-                    xlim([1+(dist(1)-0.2) 1+(dist(end)+0.2)])
-                    xticks([])
-                    
-                    set(gca,'FontSize', obj.figLayOut.letterSize);
-                    set(gca,'FontName', obj.figLayOut.letterType);
-                end
                 
-                if obj.DetectOrDisc
-                    figCAF = figure; hold on;
-                    for indCond = 1:size(datsum.q, 1)
-                        CI95 = 1.96.*(datsum.pijstd(indCond,numBins+1:numBins+3)./sqrt(length(obj.ppNames)));
-                        h = errorbar(datsum.qm(indCond,numBins+1:numBins+3), (datsum.pij(indCond,numBins+1:numBins+3)),CI95,...
-                            'Color', obj.figLayOut.colours(indCond,:), 'LineStyle', obj.figLayOut.lineType{indCond},...
-                            'LineWidth', obj.figLayOut.lineWidth);
-                        legendThis(indCond) = h;
-                    end
-                    
-                    line([0 0],  [0 1.05], 'Color', 'k', 'LineWidth', 1.5)
-                    
-                    ylim([0 0.6]);%1.05])
-                    yticks([0:0.2:0.6])
-                    %ylabel('Proportion')
-                    
-                    xlim([0 limits])
-                    set(gca,'XTick',[0:0.4:limits])
-                    set(gca,'XTickLabel', [num2str([0:0.4:limits]')]);
-                    xlabel('Reaction times (sec)');
-                    
-                    set(gca,'FontSize', obj.figLayOut.letterSize);
-                    set(gca,'FontName', obj.figLayOut.letterType);
-                end
-                %}
             end
             
             figure(fig1)
@@ -1241,17 +1055,7 @@ classdef dataModelling < handle
             
             figure(figFA)
             plotSave(gca, ['FalseAlarms' num2str(plotComb) '.png'], figureFolder, [3.3 3]);
-            if ~isempty(obj.stim.FACutOff)
-                figure(figFAcut)
-                plotSave(gca, ['FalseAlarmsCutOff' num2str(plotComb) '.png'], figureFolder, [3.3 3]);
-            end 
-            
-            %{
-            if obj.DetectOrDisc
-                figure(figCAF)
-                plotSave(gca, ['CAF' num2str(plotComb) '.png'], figureFolder, obj.figLayOut.saveDim);
-            end
-            %}
+        
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1444,17 +1248,9 @@ classdef dataModelling < handle
             % TODO change datsum/sim set up and Discrimination
             datsum     = obj.modelBehaviour.datsum;
            
-            if obj.DetectOrDisc
-                cond       = simdat(:,1:end-3); 
-                outcome    = simdat(:,end-2);
-                RT         = simdat(:,end-1);
-                Response   = simdat(:,end);
-                Response(isnan(Response)) = 0;
-            else
-                cond       = simdat(:,1:end-2);
-                outcome    = simdat(:,end-1);
-                RT         = simdat(:,end);
-            end
+            cond       = simdat(:,1:end-2);
+            outcome    = simdat(:,end-1);
+            RT         = simdat(:,end);
             
             uniCond = unique(cond(all(cond ~= 0,2),:), 'rows');
             qps     = obj.modelBehaviour.qps;
@@ -1465,47 +1261,19 @@ classdef dataModelling < handle
                 currOutcome = outcome(currCond);    
                 currMisses  = currOutcome == 2;
                 currFA      = currOutcome == 3;
-                
-                currFART    = RT(currCond & outcome == 3);
                 currRT      = RT(currCond & outcome == 1);
                 
                 currNumTrials = sum(currOutcome ~= 3);
                 
-                if obj.DetectOrDisc  % get only correct responses for the cummeliatve response function.
-                    currCorrect = all(cond == uniCond(indCond,:), 2)  & Response;
-                    currRT      = RT(currCorrect);
-                    
-                    currError   = all(cond == uniCond(indCond,:), 2)  & ~Response;
-                    currRTError = RT(currError);
-                end
-                
-                    
                 for indBin = 1:numBins
                     % "predicted" proportion for this parameter vector - estimated from the simulation
                     pred(indCond,indBin) = min(1, sum(currRT>datsum.q(indCond,indBin) & currRT<=datsum.q(indCond,indBin+1))/currNumTrials);
                 end
-                                                
-                if obj.DetectOrDisc
-                    for indQ = 1:3
-                        keyboard
-                        % number of trials in each of the 5 bins
-                        pred(indCond,numBins+indQ)  =  min(1, sum(currRTError>datsum.q(indCond,numBins+1+indQ) & currRTError<=datsum.q(indCond,numBins+1+indQ+1))/currNumTrials);
-                    end
-                    if numBins ==  furtherIndex
-                        furtherIndex = length(pred)+1;
-                    end
-                end
-
+                
                 pred(indCond,furtherIndex) = min(1, sum(currMisses)/currNumTrials);
 
                 % then add a final bin that counts the false alarms:
                 pred(indCond,furtherIndex+1) = min(1, sum(currFA)/(datsum.nShortestITI(indCond)*obj.modelBehaviour.simulateMoreX));
-
-                if ~isempty(obj.stim.FACutOff)
-                    currFA = currRT(currOutcome == 3);
-                    currFA = currFA > obj.stim.FACutOff;
-                    pred(indCond,furtherIndex+2) = min(1, sum(currFA)/currNumTrials);
-                end
 
                 % note the min(1, .. limiter makes sure the proportion doesn't go above 1, which causes complex G-squared
                 % values. I *think* this also might mean the starting vectors that are really far off in that they produce way
@@ -1514,34 +1282,18 @@ classdef dataModelling < handle
             end
             
             err = [];
-            datsum.pij(datsum.pij == 0) = 0.001;
             for indCond = 1:size(pred,1)
                 % hits and misses
                 for indBin = 1:numBins+1 
                     err = [err datsum.qn(indCond,indBin)*log(datsum.pij(indCond,indBin)/(pred(indCond,indBin)+0.0001))]; % small constant is there to avoid 0 in denominator
                 end
-                
-                if obj.DetectOrDisc
-                    keyboard
-                    for indBin = 1:size(predCAF,2)
-                        err = [err datsum.qCAF(indCond,indBin)*log(datsum.pCAF(indCond,indBin)/(predCAF(indCond,indBin)+0.0001))];
-                    end
-                end
-             
+                            
                 nShortestITI = datsum.nShortestITI(indCond)/length(obj.ppNames);
                 
                 indFA = furtherIndex + 1;
                
                 err = [err datsum.qn(indCond,indFA)*log(datsum.pij(indCond,indFA)/(pred(indCond, indFA)+0.0001))]; % small constant is there to avoid 0 in denominator
                 err = [err (nShortestITI*(1-datsum.pij(indCond,indFA)))*log((1-datsum.pij(indCond,indFA))/((1-pred(indCond, indFA))+0.0001))]; % small constant is there to avoid 0 in denominator
-               
-                if ~isempty(obj.stim.FACutOff)
-                    indFA = furtherIndex + 2;
-                    numtarg = datsum.numberOfTrials(indCond);
-
-                    err = [err datsum.qn(indCond,indFA)*log(datsum.pij(indCond,indFA)/(pred(indCond,indFA)+0.0001))]; % small constant is there to avoid 0 in denominator
-                    err = [err numtarg*(1-datsum.pij(indCond,indFA))*log((1-datsum.pij(indCond,indFA))/(1-pred(indCond,indFA)+0.0001))]; % small constant is there to avoid 0 in denominator
-                end
             end
             
             err = nansum(err)*2;
