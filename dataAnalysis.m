@@ -1081,8 +1081,10 @@ classdef dataAnalysis < handle
                 
                 currInput  = fullfile(obj.outputFolder, 'EEG data', obj.ppNames{indPP});
                 currOutput = fullfile(obj.outputFolder, 'EEG data', obj.ppNames{indPP}, [obj.ppNames{indPP} '_epochedEEG_HPF' num2str(obj.eeg.HPFcutoff) obj.stim.timing '.mat']);
-                
-                if ~exist(currOutput, 'file') || redoEpoch
+               
+                currOutputBehaviour = fullfile(obj.outputFolder, 'Behavioural data');
+
+                if ~exist(currOutputBehaviour, 'file') || redoEpoch
                     fprintf(['Epoching participant ' obj.ppNames{indPP} ])
                     
                     %% %%%%%%%%%%%%  Loop through block files   %%%%%%%
@@ -1358,7 +1360,7 @@ classdef dataAnalysis < handle
                         end
                     end
                     
-                    saveFiles = {'tmpBehaviour'};
+                    saveFiles = {};
                     if obj.analysisEEG
                         ERP = ERP(:,:,1:size(tmpBehaviour.indReaction,1));
                         
@@ -1398,12 +1400,13 @@ classdef dataAnalysis < handle
                     end
                     
                     save(currOutput, saveFiles{:}, '-v7.3');
+                    save(fullfile(currOutputBehaviour, [obj.ppNames{indPP} '_Behaviour' obj.stim.timing '.mat']), 'tmpBehaviour', '-v7.3');
+
                     obj.behaviour{indPP} = tmpBehaviour;
                     
                     fprintf('\n')
                 else
-                    load(currOutput, 'tmpBehaviour');
-                    
+                    load(fullfile(currOutputBehaviour, [obj.ppNames{indPP} '_Behaviour' obj.stim.timing '.mat']), 'tmpBehaviour');
                     obj.behaviour{indPP} = tmpBehaviour;
                     
                 end
@@ -1503,19 +1506,34 @@ classdef dataAnalysis < handle
                 obj.behaviour{indPP}.RT(obj.behaviour{indPP}.RT == 0) = NaN;
                 % remove all the 'early' response
                 indEarly = obj.behaviour{indPP}.RT <= obj.stim.RTCutOff;
-                obj.behaviour{indPP}.Early = zeros(size(indEarly,1),1);
+                 indEarly = obj.behaviour{indPP}.RT <= obj.stim.RTCutOff;
+                %obj.behaviour{indPP}.Early = zeros(size(indEarly,1),1);
                 
                 if any(indEarly(:))
+                     
                     % move early response to a miss as well as adding them
                     % to false alarms.
-                    obj.behaviour{indPP}.Early = any(indEarly,2);
+                    [r,c] = find(indEarly);
+                    early = obj.behaviour{indPP}.RT(find(indEarly));
+                    %
+                    numFA = size(obj.behaviour{indPP}.FalseAlarm,2);
+                    obj.behaviour{indPP}.FalseAlarm(:,end+1:end+max(c))= 0;
+                    obj.behaviour{indPP}.indFalseAlarm(:,end+1:end+max(c)) = NaN;
                     
-                    obj.behaviour{indPP}.RT(indEarly) = NaN;
-                    obj.behaviour{indPP}.indReaction(indEarly) = NaN;
-                    obj.behaviour{indPP}.Reaction(indEarly) = NaN;
-                    obj.behaviour{indPP}.Misses(indEarly) = 1;
+                    for currEarly = 1:length(r)
+                        obj.behaviour{indPP}.FalseAlarm(r(currEarly),numFA+c(currEarly))= 1;
+                        obj.behaviour{indPP}.indFalseAlarm(r(currEarly),numFA+c(currEarly)) = early(currEarly);
+                    end
+                    
+                    % move early response to a miss as well as adding them
+                    % to false alarms.
+                    obj.behaviour{indPP}.RT(find(indEarly)) = NaN;
+                    obj.behaviour{indPP}.indReaction(find(indEarly)) = NaN;
+                    obj.behaviour{indPP}.Reaction(find(indEarly)) = NaN;
+                    obj.behaviour{indPP}.Misses(any(indEarly,2)) = 1; 
+                 
+                    %}
                 end
-                
                 if firstRT
                     % only get the first response that is larger then
                     % the RT cutoff
@@ -1935,9 +1953,7 @@ classdef dataAnalysis < handle
                                 ERP(indChan,timeSeries(1):timeSeries(end)+ diff(timeSeries(1:2))-1, indEpoch) = interp(downERD(indChan,:, indEpoch), diff(timeSeries(1:2)));
                             end
                         end
-                        if BaselineCorrect
-                            ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
-                        end
+                        ERP = ERP - repmat(nanmean(ERP(:, trangeBaseline, :),2), 1, size(ERP,2), 1);
                     end
                     
                     % calculated ERP topography
